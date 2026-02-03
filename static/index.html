@@ -3,18 +3,28 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>LQM Advertentie Beoordelaar</title>
+  <title>LQM Advertentie Beoordelaar | Natuurhuisje</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
+    /* Natuurhuisje.nl-stijl: licht, groen, natuur */
     :root {
-      --bg: #0f1419;
-      --surface: #1a2332;
-      --border: #2d3a4d;
-      --text: #e6edf3;
-      --muted: #8b949e;
-      --bonus: #3fb950;
-      --malus: #f85149;
-      --accent: #58a6ff;
-      --font: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      --nh-green: #2d6a2e;
+      --nh-green-dark: #234d24;
+      --nh-green-light: #4a9c4b;
+      --nh-green-soft: #e8f0e8;
+      --bg: #f5f7f5;
+      --surface: #ffffff;
+      --border: #dde5dd;
+      --border-light: #e8eee8;
+      --text: #2c3e2c;
+      --muted: #5c6b5c;
+      --bonus: #2d6a2e;
+      --malus: #b54a4a;
+      --malus-soft: #f8e8e8;
+      --accent: #2d6a2e;
+      --font: 'Source Sans 3', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     }
     * { box-sizing: border-box; }
     body {
@@ -32,12 +42,14 @@
     }
     h1 {
       font-size: 1.75rem;
-      font-weight: 600;
+      font-weight: 700;
       margin-bottom: 0.5rem;
+      color: var(--nh-green-dark);
     }
     .subtitle {
       color: var(--muted);
       margin-bottom: 2rem;
+      font-size: 0.95rem;
     }
     .input-row {
       display: flex;
@@ -52,25 +64,28 @@
       background: var(--surface);
       color: var(--text);
       font-size: 1rem;
+      font-family: inherit;
     }
     .input-row input::placeholder {
       color: var(--muted);
     }
     .input-row input:focus {
       outline: none;
-      border-color: var(--accent);
+      border-color: var(--nh-green);
+      box-shadow: 0 0 0 2px var(--nh-green-soft);
     }
     .btn {
       padding: 0.75rem 1.5rem;
       border: none;
       border-radius: 8px;
       font-size: 1rem;
-      font-weight: 500;
+      font-weight: 600;
       cursor: pointer;
-      background: var(--accent);
+      background: var(--nh-green);
       color: #fff;
+      font-family: inherit;
     }
-    .btn:hover { opacity: 0.9; }
+    .btn:hover { background: var(--nh-green-dark); }
     .btn:disabled {
       opacity: 0.6;
       cursor: not-allowed;
@@ -80,9 +95,9 @@
       margin-top: 1rem;
     }
     .error {
-      background: rgba(248, 81, 73, 0.15);
+      background: var(--malus-soft);
       border: 1px solid var(--malus);
-      color: #f85149;
+      color: var(--malus);
       padding: 1rem;
       border-radius: 8px;
       margin-bottom: 1rem;
@@ -94,6 +109,7 @@
       padding: 1.5rem;
       margin-bottom: 1.5rem;
       text-align: center;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.04);
     }
     .score-total .number {
       font-size: 2.5rem;
@@ -108,15 +124,18 @@
       border-radius: 12px;
       margin-bottom: 1rem;
       overflow: hidden;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.04);
     }
     .category-header {
       padding: 1rem 1.25rem;
       font-weight: 600;
       font-size: 1.05rem;
-      border-bottom: 1px solid var(--border);
+      border-bottom: 1px solid var(--border-light);
       display: flex;
       justify-content: space-between;
       align-items: center;
+      background: var(--nh-green-soft);
+      color: var(--nh-green-dark);
     }
     .category-header .cat-score {
       font-size: 0.95rem;
@@ -131,14 +150,14 @@
     }
     .attr-list li {
       padding: 0.6rem 1.25rem;
-      border-bottom: 1px solid var(--border);
+      border-bottom: 1px solid var(--border-light);
       display: flex;
       justify-content: space-between;
       align-items: flex-start;
       gap: 1rem;
     }
     .attr-list li:last-child { border-bottom: none; }
-    .attr-name { font-size: 0.9rem; color: var(--text); }
+    .attr-name { font-size: 0.9rem; color: var(--text); font-weight: 500; }
     .attr-reason { font-size: 0.85rem; color: var(--muted); flex: 1; }
     .attr-score {
       font-weight: 600;
@@ -151,18 +170,18 @@
     .n-a-badge {
       font-size: 0.75rem;
       color: var(--muted);
-      background: rgba(139, 148, 158, 0.2);
+      background: var(--nh-green-soft);
       padding: 0.15rem 0.5rem;
       border-radius: 4px;
     }
-    .advisory-header { display: flex; align-items: center; gap: 0.5rem; }
+    .advisory-header { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
     .advisory-check {
       color: var(--bonus);
       font-weight: 700;
-      font-size: 1.1rem;
+      font-size: 1rem;
     }
     .advisory-recommendation {
-      background: rgba(248, 81, 73, 0.08);
+      background: var(--malus-soft);
       border-left: 3px solid var(--malus);
       padding: 0.6rem 0.75rem;
       margin-top: 0.25rem;
@@ -176,12 +195,21 @@
       margin-bottom: 1rem;
       word-break: break-all;
     }
+    .brand-note {
+      font-size: 0.8rem;
+      color: var(--muted);
+      margin-top: 2rem;
+      padding-top: 1rem;
+      border-top: 1px solid var(--border-light);
+    }
+    .brand-note a { color: var(--nh-green); text-decoration: none; }
+    .brand-note a:hover { text-decoration: underline; }
   </style>
 </head>
 <body>
   <div class="container">
     <h1>LQM Advertentie Beoordelaar</h1>
-    <p class="subtitle">Voer een URL in van een advertentie. De agent analyseert de listing op 50 LQM-attributen in 8 categorieën (Description, Impact, Location, Availability, Photos, Guest Opinion, Filters, Time Settings).</p>
+    <p class="subtitle">Voer een URL in van een advertentie. De agent analyseert de listing op LQM-criteria en geeft aanbevelingen voor een goede advertentie (beschrijving, foto's) en een score voor overige categorieën.</p>
 
     <form id="form">
       <div class="input-row">
@@ -200,6 +228,7 @@
       </div>
       <div id="categories"></div>
     </div>
+    <p class="brand-note">Stijl geïnspireerd op <a href="https://www.natuurhuisje.nl" target="_blank" rel="noopener">Natuurhuisje.nl</a> — De natuur opent je ogen.</p>
   </div>
 
   <script>
