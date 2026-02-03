@@ -55,10 +55,12 @@ def _get_all_text(soup: BeautifulSoup, selectors: list[str], join: str = " ") ->
 
 
 _IMG_SKIP = {"logo", "icon", "avatar", "sprite", "pixel", "tracking", "1x1", "placeholder"}
+# Alleen foto's met width 760 meenemen (voorkomt dubbeltellingen; listing-galerij gebruikt 760)
+_LISTING_IMAGE_WIDTH = "760"
 
 
 def _listing_images(soup: BeautifulSoup) -> list:
-    """Lijst van img-elementen die bij de listing horen (niet logo's/icons)."""
+    """Lijst van img-elementen die bij de listing horen: niet logo's/icons, en alleen width=760 (galerij)."""
     imgs = soup.find_all("img", src=True)
     out = []
     for img in imgs:
@@ -67,12 +69,16 @@ def _listing_images(soup: BeautifulSoup) -> list:
         if any(s in src or s in alt for s in _IMG_SKIP):
             continue
         if "data:image" in src or src.startswith("http") or src.startswith("//") or src.startswith("/"):
+            # Alleen foto's met width 760 (voorkomt dubbeltellingen)
+            w = img.get("width") or img.get("data-width")
+            if w is None or _LISTING_IMAGE_WIDTH not in str(w):
+                continue
             out.append(img)
     return out
 
 
 def _count_images(soup: BeautifulSoup, url: str) -> int:
-    """Telt afbeeldingen die waarschijnlijk bij de listing horen (niet logo's/icons)."""
+    """Telt afbeeldingen die bij de listing horen (width=760, geen logo's/icons)."""
     return len(_listing_images(soup))
 
 
