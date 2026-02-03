@@ -290,7 +290,7 @@
         else if (total < 0) totalScoreEl.classList.add('negative');
 
         categoriesEl.innerHTML = '';
-        const order = ['Description', 'Impact', 'Location', 'Availability', 'Photos', 'Guest Opinion', 'Filters', 'Time Settings'];
+        const order = ['Description', 'Impact', 'Location', 'Availability', 'Photos', 'Gastenbeoordelingen', 'Filters', 'Time Settings'];
         const byCat = data.by_category || {};
         for (const cat of order) {
           if (!byCat[cat]) continue;

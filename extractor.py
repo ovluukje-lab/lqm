@@ -161,10 +161,12 @@ def _extract_from_json_ld(blocks: list[dict]) -> dict:
                 out["addressRegion"] = addr.get("addressRegion")
                 out["addressLocality"] = addr.get("addressLocality")
                 out["postalCode"] = addr.get("postalCode")
-            # Recensies
+            # Recensies en gemiddelde beoordeling
             agg = b.get("aggregateRating") or {}
             if isinstance(agg, dict):
                 out["reviewCount"] = agg.get("reviewCount")
+                out["ratingValue"] = agg.get("ratingValue")
+                out["bestRating"] = agg.get("bestRating")
             # Foto's
             img = b.get("image") or []
             if isinstance(img, list):
@@ -247,6 +249,13 @@ def extract_from_html(html: str, url: str) -> ExtractedData:
             data.nr_reviews = int(json_data["reviewCount"])
         except (TypeError, ValueError):
             pass
+    if json_data.get("ratingValue") is not None:
+        try:
+            data.average_rating = float(json_data["ratingValue"])
+            best = json_data.get("bestRating")
+            data.rating_scale_max = int(best) if best is not None else 10
+        except (TypeError, ValueError):
+            pass
     if data.nr_reviews is None:
         # Zoek naar "X reviews" of "X beoordelingen"
         text = soup.get_text()
@@ -302,6 +311,23 @@ def extract_from_html(html: str, url: str) -> ExtractedData:
     w, h = _first_photo_dimensions(soup)
     data.first_photo_width = w
     data.first_photo_height = h
+
+    # AI-vision: analyseer eerste foto (exterior/interieur, watermerk, collage) als OPENAI_API_KEY gezet is
+    imgs = _listing_images(soup)
+    if imgs:
+        first_src = imgs[0].get("src") or imgs[0].get("data-src")
+        if first_src:
+            try:
+                from vision_analyzer import analyze_first_photo
+                ai = analyze_first_photo(first_src, url)
+                if ai.get("is_exterior") is not None:
+                    data.first_photo_ai_exterior = ai["is_exterior"]
+                if ai.get("has_watermark") is not None:
+                    data.first_photo_ai_watermark = ai["has_watermark"]
+                if ai.get("is_collage") is not None:
+                    data.first_photo_ai_collage = ai["is_collage"]
+            except Exception:
+                pass
 
     return data
 

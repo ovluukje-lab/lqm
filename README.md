@@ -66,6 +66,24 @@ docker run -p 8080:8080 lqm-agent
 
 De app is bereikbaar op **http://localhost:8080**. Je kunt dezelfde image op een VPS of cloud (bijv. Google Cloud Run, Fly.io) deployen.
 
+## AI-foto-analyse (optioneel)
+
+De agent kan de **eerste foto** van een advertentie met **OpenAI Vision** (GPT-4o-mini) analyseren:
+
+- **Exterior vs. interieur** — Is de coverfoto een huisje van buiten of een interieur?
+- **Watermerk/tekst** — Staat er een naam, watermerk of logo op de foto?
+- **Collage** — Is het een collage van meerdere foto's?
+
+**Aan:** Zet de omgevingsvariabele **`OPENAI_API_KEY`** (je OpenAI API-key). De agent haalt dan de eerste foto op, stuurt die naar de API en gebruikt het resultaat voor de Photos-aanbevelingen. Zonder key wordt alleen alt-tekst/HTML gebruikt en blijven "geen namen" en "geen collage" handmatige tips.
+
+**Kosten:** Er wordt één Vision-aanroep per geanalyseerde advertentie gedaan (een paar cent per request met gpt-4o-mini). Zonder key zijn er geen kosten.
+
+**Lokaal:** `set OPENAI_API_KEY=sk-...` (Windows) of `export OPENAI_API_KEY=sk-...` (Mac/Linux) vóór `python app.py`.
+
+**Render:** Dashboard → je service → **Environment** → **Add Environment Variable** → `OPENAI_API_KEY` = je key.
+
+---
+
 ## Beperking bij alleen URL
 
 Veel LQM-attributen gebruiken **backend-data** (bijv. `allow_instant_booking`, `channel_manager_type`, iCal-fouten, CTR, click-to-cart). Die zijn niet zichtbaar op de publieke pagina. Voor die velden geeft de agent **"niet beoordeelbaar vanaf URL"** en 0 punten. Voor een volledige score is een API of database met listing-data nodig; deze agent gebruikt alleen wat van de HTML te halen is (tekst, afbeeldingen, JSON-LD, meta).

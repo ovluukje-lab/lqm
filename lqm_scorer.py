@@ -63,10 +63,16 @@ class ExtractedData:
     first_photo_house_not_interior: Optional[bool] = None  # True=huisje/exterior, False=interieur, None=niet te bepalen
     first_photo_width: Optional[int] = None  # breedte eerste foto (uit HTML) voor resolutie-check
     first_photo_height: Optional[int] = None
+    # AI-vision (OpenAI): alleen gezet als OPENAI_API_KEY is gezet en analyse lukt
+    first_photo_ai_exterior: Optional[bool] = None  # True=exterior, False=interieur
+    first_photo_ai_watermark: Optional[bool] = None  # True=watermerk/tekst zichtbaar
+    first_photo_ai_collage: Optional[bool] = None   # True=collage
     # Guest opinion
     click_to_add_to_cart: Optional[float] = None
     nr_reviews: Optional[int] = None
     nr_reviews_past6months: Optional[int] = None
+    average_rating: Optional[float] = None   # gemiddelde beoordeling (schaal 5 of 10)
+    rating_scale_max: Optional[int] = None  # 5 of 10
     # Filters
     max_babies: Optional[int] = None
     baby_facilities_count: Optional[int] = None
@@ -458,44 +464,77 @@ def score_photos(data: ExtractedData) -> list[LQMScoreItem]:
             recommendation=f"Gebruik maximaal {MAX_PHOTOS} foto's. Te veel foto's kan overweldigend zijn. Nu: {n}. Kies de beste en meest representatieve foto's."
         ))
 
-    # 2. Eerste foto: huisje (exterior), geen interieur
-    first_house = data.first_photo_house_not_interior
+    # 2. Eerste foto: huisje (exterior), geen interieur — AI of alt-tekst
+    first_house = data.first_photo_ai_exterior if data.first_photo_ai_exterior is not None else data.first_photo_house_not_interior
+    ai_source = data.first_photo_ai_exterior is not None
     if first_house is True:
         items.append(LQMScoreItem(
             "eerste_foto_huisje", "Photos", 0, "advisory",
-            "De eerste (cover)foto toont een huisje/exterior, geen interieur.",
+            "De eerste (cover)foto toont een huisje/exterior, geen interieur." + (" (AI-analyse)" if ai_source else ""),
             passed=True
         ))
     elif first_house is False:
         items.append(LQMScoreItem(
             "eerste_foto_huisje", "Photos", 0, "advisory",
-            "De eerste foto lijkt een interieurfoto te zijn (uit alt-tekst/bestandsnaam).",
+            "De eerste foto toont een interieur, geen huisje van buiten." + (" (AI-analyse)" if ai_source else " (uit alt-tekst/bestandsnaam)."),
             passed=False,
             recommendation="Zet een foto van het huisje zelf (exterior, bijvoorbeeld de voorgevel of het huisje in de omgeving) als eerste/coverfoto. Geen interieur (woonkamer, keuken, slaapkamer) als eerste foto; dat kan later in de galerij."
         ))
     else:
         items.append(LQMScoreItem(
             "eerste_foto_huisje", "Photos", 0, "advisory",
-            "Niet te bepalen of de eerste foto een huisje of interieur is (geen/weinig alt-tekst).",
+            "Niet te bepalen of de eerste foto een huisje of interieur is (geen/weinig alt-tekst). Stel OPENAI_API_KEY in voor AI-analyse.",
             not_applicable=True,
             recommendation="Zorg dat de eerste foto het huisje van buiten toont (geen interieur als coverfoto). Voeg bij voorkeur een duidelijke alt-tekst toe aan de foto's."
         ))
 
-    # 3. Geen namen op foto's (niet automatisch te controleren)
-    items.append(LQMScoreItem(
-        "geen_namen_op_fotos", "Photos", 0, "advisory",
-        "Niet automatisch te controleren.",
-        not_applicable=True,
-        recommendation="Controleer handmatig dat er geen namen, watermerken of logo's op de foto's staan. Foto's moeten professioneel en neutraal ogen."
-    ))
+    # 3. Geen namen op foto's — AI of handmatige aanbeveling
+    wm = data.first_photo_ai_watermark
+    if wm is not None:
+        if wm:
+            items.append(LQMScoreItem(
+                "geen_namen_op_fotos", "Photos", 0, "advisory",
+                "Op de eerste foto is tekst, een watermerk of logo zichtbaar (AI-analyse).",
+                passed=False,
+                recommendation="Verwijder watermerken, namen of logo's van de foto's. Foto's moeten professioneel en neutraal ogen."
+            ))
+        else:
+            items.append(LQMScoreItem(
+                "geen_namen_op_fotos", "Photos", 0, "advisory",
+                "Geen watermerk of tekst zichtbaar op de eerste foto (AI-analyse).",
+                passed=True
+            ))
+    else:
+        items.append(LQMScoreItem(
+            "geen_namen_op_fotos", "Photos", 0, "advisory",
+            "Niet automatisch te controleren. Stel OPENAI_API_KEY in voor AI-analyse van de foto.",
+            not_applicable=True,
+            recommendation="Controleer handmatig dat er geen namen, watermerken of logo's op de foto's staan. Foto's moeten professioneel en neutraal ogen."
+        ))
 
-    # 4. Geen collage (niet automatisch te controleren)
-    items.append(LQMScoreItem(
-        "geen_collage", "Photos", 0, "advisory",
-        "Niet automatisch te controleren.",
-        not_applicable=True,
-        recommendation="Gebruik losse foto's, geen collages. Elke foto moet één duidelijke afbeelding tonen."
-    ))
+    # 4. Geen collage — AI of handmatige aanbeveling
+    coll = data.first_photo_ai_collage
+    if coll is not None:
+        if coll:
+            items.append(LQMScoreItem(
+                "geen_collage", "Photos", 0, "advisory",
+                "De eerste foto is een collage van meerdere afbeeldingen (AI-analyse).",
+                passed=False,
+                recommendation="Gebruik losse foto's, geen collages. Elke foto moet één duidelijke afbeelding tonen."
+            ))
+        else:
+            items.append(LQMScoreItem(
+                "geen_collage", "Photos", 0, "advisory",
+                "De eerste foto is geen collage (AI-analyse).",
+                passed=True
+            ))
+    else:
+        items.append(LQMScoreItem(
+            "geen_collage", "Photos", 0, "advisory",
+            "Niet automatisch te controleren. Stel OPENAI_API_KEY in voor AI-analyse van de foto.",
+            not_applicable=True,
+            recommendation="Gebruik losse foto's, geen collages. Elke foto moet één duidelijke afbeelding tonen."
+        ))
 
     # 5. Voldoende resolutie
     w, h = data.first_photo_width, data.first_photo_height
@@ -524,36 +563,56 @@ def score_photos(data: ExtractedData) -> list[LQMScoreItem]:
     return items
 
 
-# ---------- Category: Guest Opinion ----------
+# ---------- Category: Gastenbeoordelingen (advisory) ----------
 def score_guest_opinion(data: ExtractedData) -> list[LQMScoreItem]:
+    """Gastenbeoordelingen: altijd advies om beoordelingen te laten schrijven; compliment bij >3 beoordelingen met score >8."""
     items = []
+    n = data.nr_reviews
+    avg = data.average_rating
+    scale = data.rating_scale_max or 10
+    # Score "boven de 8": op schaal 10 is dat >= 8; op schaal 5 is dat >= 4
+    above_8 = (avg is not None and scale == 10 and avg >= 8) or (avg is not None and scale == 5 and avg >= 4)
 
-    if data.click_to_add_to_cart is not None:
+    # 1. Altijd advies: laat gasten beoordelingen schrijven, recente beoordelingen zijn cruciaal
+    items.append(LQMScoreItem(
+        "advies_gastenbeoordelingen", "Gastenbeoordelingen", 0, "advisory",
+        "Gastenbeoordelingen helpen nieuwe gasten bij hun keuze. Recente beoordelingen zijn cruciaal.",
+        not_applicable=True,
+        recommendation=(
+            "Vraag gasten na hun verblijf om een beoordeling te schrijven. "
+            "Benadruk dat recente beoordelingen cruciaal zijn: ze laten zien dat je accommodatie actief en betrouwbaar is. "
+            "Nieuwere beoordelingen wegen zwaarder voor potentiële gasten dan oude."
+        )
+    ))
+
+    # 2. Compliment bij meer dan 3 beoordelingen met score boven de 8
+    if n is not None and n > 3 and above_8:
         items.append(LQMScoreItem(
-            "bonus_click_to_cart_high", "Guest Opinion",
-            5 if data.click_to_add_to_cart > 0.07 else 0, "bonus",
-            f"Click-to-cart: {data.click_to_add_to_cart:.4f}."
+            "compliment_beoordelingen", "Gastenbeoordelingen", 0, "advisory",
+            f"Compliment: je hebt {n} beoordelingen met een gemiddelde score van {avg:.1f} (boven de 8). Dat versterkt het vertrouwen van nieuwe gasten.",
+            passed=True
+        ))
+    elif n is not None and n > 3 and avg is not None and not above_8:
+        items.append(LQMScoreItem(
+            "compliment_beoordelingen", "Gastenbeoordelingen", 0, "advisory",
+            f"Je hebt {n} beoordelingen (gemiddeld {avg:.1f}). Nog geen score boven de 8.",
+            passed=False,
+            recommendation="Blijf gasten vragen om een beoordeling. Een gemiddelde score boven de 8 (op 10) geeft potentiële gasten extra vertrouwen."
+        ))
+    elif n is not None and n <= 3:
+        items.append(LQMScoreItem(
+            "compliment_beoordelingen", "Gastenbeoordelingen", 0, "advisory",
+            f"Je hebt {n} beoordeling(en). Meer recente beoordelingen helpen nieuwe gasten.",
+            passed=False,
+            recommendation="Vraag gasten actief om een beoordeling na hun verblijf. Meer dan 3 beoordelingen met een score boven de 8 versterken je advertentie."
         ))
     else:
-        items.append(LQMScoreItem("bonus_click_to_cart_high", "Guest Opinion", 0, "bonus", "Niet beschikbaar (tracking).", not_applicable=True))
-
-    if data.nr_reviews is not None:
         items.append(LQMScoreItem(
-            "bonus_review_any", "Guest Opinion",
-            3 if data.nr_reviews > 0 else 0, "bonus",
-            f"Aantal reviews: {data.nr_reviews}."
+            "compliment_beoordelingen", "Gastenbeoordelingen", 0, "advisory",
+            "Aantal of gemiddelde beoordeling niet zichtbaar op de pagina.",
+            not_applicable=True,
+            recommendation="Laat gasten beoordelingen schrijven. Meer dan 3 beoordelingen met een score boven de 8 zijn een sterk visitekaartje."
         ))
-    else:
-        items.append(LQMScoreItem("bonus_review_any", "Guest Opinion", 0, "bonus", "Niet zichtbaar op pagina.", not_applicable=True))
-
-    if data.nr_reviews_past6months is not None:
-        items.append(LQMScoreItem(
-            "bonus_review_6months_or_recent", "Guest Opinion",
-            5 if data.nr_reviews_past6months > 0 else 0, "bonus",
-            f"Reviews afgelopen 6 maanden: {data.nr_reviews_past6months}."
-        ))
-    else:
-        items.append(LQMScoreItem("bonus_review_6months_or_recent", "Guest Opinion", 0, "bonus", "Niet zichtbaar.", not_applicable=True))
 
     return items
 
@@ -719,8 +778,8 @@ def score_all(data: ExtractedData) -> list[LQMScoreItem]:
 
 
 def total_lqm_score(items: list[LQMScoreItem]) -> int:
-    """Totaal LQM-score; Description en Photos (advisory) tellen niet mee."""
-    return sum(i.score for i in items if i.category not in ("Description", "Photos"))
+    """Totaal LQM-score; Description, Photos en Gastenbeoordelingen (advisory) tellen niet mee."""
+    return sum(i.score for i in items if i.category not in ("Description", "Photos", "Gastenbeoordelingen"))
 
 
 def _advisory_all_passed(items: list[LQMScoreItem]) -> bool | None:
@@ -736,13 +795,13 @@ def summary_by_category(items: list[LQMScoreItem]) -> dict:
     for i in items:
         by_cat.setdefault(i.category, {"bonus": 0, "malus": 0, "items": [], "advisory": False, "all_passed": None})
         by_cat[i.category]["items"].append(i)
-        if i.category in ("Description", "Photos"):
+        if i.category in ("Description", "Photos", "Gastenbeoordelingen"):
             by_cat[i.category]["advisory"] = True
         elif i.type_ == "bonus":
             by_cat[i.category]["bonus"] += i.score
         else:
             by_cat[i.category]["malus"] += i.score
-    for cat in ("Description", "Photos"):
+    for cat in ("Description", "Photos", "Gastenbeoordelingen"):
         if cat in by_cat:
             by_cat[cat]["all_passed"] = _advisory_all_passed(by_cat[cat]["items"])
     return by_cat
