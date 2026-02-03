@@ -249,13 +249,48 @@ def extract_from_html(html: str, url: str) -> ExtractedData:
     # Foto's: tel img op de pagina
     data.photo_count = _count_images(soup, url)
 
-    # Reviews uit JSON-LD of tekst
-    if json_data.get("reviewCount") is not None:
+    # Aantal beoordelingen: <span class="nh-anchor__label">184 beoordelingen</span>
+    label_span = soup.find("span", class_=lambda c: c and "nh-anchor__label" in (c if isinstance(c, str) else " ".join(c)))
+    if label_span:
+        label_text = (label_span.get_text() or "").strip()
+        m = re.search(r"(\d+)\s*beoordelingen?", label_text, re.I)
+        if m:
+            try:
+                data.nr_reviews = int(m.group(1))
+            except (ValueError, IndexError):
+                pass
+    # Score: bij <span class="nh-icon__star-filled"> — zoek getal inzelfde container of tel gevulde sterren
+    stars_container = soup.find("span", class_=lambda c: c and "nh-icon__star-filled" in (c if isinstance(c, str) else " ".join(c)))
+    if stars_container:
+        # Zoek naar getal (bijv. 4.8 of 4,8) in parent of siblings
+        parent = stars_container.parent
+        if parent:
+            parent_text = parent.get_text(separator=" ", strip=True) or ""
+            num_match = re.search(r"(\d+)[.,]?(\d*)", parent_text)
+            if num_match:
+                try:
+                    whole = num_match.group(1)
+                    dec = (num_match.group(2) or "0")[:2]
+                    val = float(f"{whole}.{dec}") if dec else float(whole)
+                    # Alleen als plausibele score (niet bv. 184 beoordelingen)
+                    if 0.5 <= val <= 10:
+                        data.average_rating = val
+                        data.rating_scale_max = 10 if val <= 10 else 5
+                except (ValueError, TypeError):
+                    pass
+        if data.average_rating is None and parent:
+            # Fallback: tel gevulde sterren alleen in dezelfde container (schaal 5)
+            filled = parent.find_all("span", class_=lambda c: c and "nh-icon__star-filled" in (c if isinstance(c, str) else " ".join(c)))
+            if filled:
+                data.average_rating = float(len(filled))
+                data.rating_scale_max = 5
+    # Fallback: reviews en score uit JSON-LD
+    if json_data.get("reviewCount") is not None and data.nr_reviews is None:
         try:
             data.nr_reviews = int(json_data["reviewCount"])
         except (TypeError, ValueError):
             pass
-    if json_data.get("ratingValue") is not None:
+    if json_data.get("ratingValue") is not None and data.average_rating is None:
         try:
             data.average_rating = float(json_data["ratingValue"])
             best = json_data.get("bestRating")
@@ -263,7 +298,7 @@ def extract_from_html(html: str, url: str) -> ExtractedData:
         except (TypeError, ValueError):
             pass
     if data.nr_reviews is None:
-        # Zoek naar "X reviews" of "X beoordelingen"
+        # Zoek naar "X reviews" of "X beoordelingen" in pagina-tekst
         text = soup.get_text()
         for pat in [r"(\d+)\s*(?:reviews?|beoordelingen?)", r"(?:reviews?|beoordelingen?)\s*[:\s]*(\d+)"]:
             m = re.search(pat, text, re.I)
