@@ -49,7 +49,7 @@ def analyze():
 
     # Serialiseer voor JSON
     def item_to_dict(i: LQMScoreItem) -> dict:
-        return {
+        d = {
             "attribute": i.attribute,
             "category": i.category,
             "score": i.score,
@@ -57,6 +57,11 @@ def analyze():
             "reason": i.reason,
             "not_applicable": i.not_applicable,
         }
+        if i.passed is not None:
+            d["passed"] = i.passed
+        if i.recommendation is not None:
+            d["recommendation"] = i.recommendation
+        return d
 
     return jsonify({
         "ok": True,
@@ -68,6 +73,8 @@ def analyze():
                 "bonus": info["bonus"],
                 "malus": info["malus"],
                 "items": [item_to_dict(i) for i in info["items"]],
+                "advisory": info.get("advisory", False),
+                "all_passed": info.get("all_passed"),
             }
             for cat, info in by_category.items()
         },

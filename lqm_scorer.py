@@ -17,13 +17,15 @@ except ImportError:
 
 @dataclass
 class LQMScoreItem:
-    """Eén score-attribuut met naam, punten en toelichting."""
+    """Eén score-attribuut met naam, punten en toelichting. Voor Description (advisory): passed + recommendation."""
     attribute: str
     category: str
     score: int
-    type_: str  # "bonus" | "malus"
+    type_: str  # "bonus" | "malus" | "advisory"
     reason: str
     not_applicable: bool = False  # True als niet beoordeelbaar vanaf URL
+    passed: Optional[bool] = None  # Voor advisory: True = voldoet, False = aanbeveling geven
+    recommendation: Optional[str] = None  # Aanbeveling wanneer passed=False
 
 
 @dataclass
@@ -101,111 +103,103 @@ def _not_opengds(data: ExtractedData) -> bool:
     return not _is_opengds(data)
 
 
-# ---------- Category: Description ----------
+# ---------- Category: Description (advisory: aanbeveling + groene check) ----------
+# Geen punten; check of voldoet en geef aanbeveling om aan voorwaarden te voldoen.
+MIN_GEN_LEN = 275   # algemene beschrijving minimaal lang genoeg
+MIN_NAT_LEN = 200   # natuur beschrijving minimaal lang genoeg
+
+
 def score_description(data: ExtractedData) -> list[LQMScoreItem]:
+    """Description als aanbeveling: check lengte, verschillend, geen capslock. Groene check als alles voldoet."""
     items = []
     gen = data.general_description
     nat = data.nature_description
     len_gen = _len(gen)
     len_nat = _len(nat)
-
-    # bonus_general_description_length 0–5
-    if gen is not None:
-        items.append(LQMScoreItem(
-            "bonus_general_description_length", "Description",
-            5 if len_gen > 550 else 0, "bonus",
-            f"Algemene beschrijving lengte: {len_gen} tekens (bonus bij >550)."
-        ))
-    else:
-        items.append(LQMScoreItem("bonus_general_description_length", "Description", 0, "bonus", "Niet beschikbaar vanaf URL.", not_applicable=True))
-
-    # bonus_nature_description_length 0–5
-    if nat is not None:
-        items.append(LQMScoreItem(
-            "bonus_nature_description_length", "Description",
-            5 if len_nat > 550 else 0, "bonus",
-            f"Natuur beschrijving lengte: {len_nat} tekens (bonus bij >550)."
-        ))
-    else:
-        items.append(LQMScoreItem("bonus_nature_description_length", "Description", 0, "bonus", "Niet beschikbaar vanaf URL.", not_applicable=True))
-
-    # malus_general_description_missing -20
-    items.append(LQMScoreItem(
-        "malus_general_description_missing", "Description",
-        -20 if gen is None or not gen.strip() else 0, "malus",
-        "Algemene beschrijving ontbreekt." if (gen is None or not gen.strip()) else "Algemene beschrijving aanwezig."
-    ))
-
-    # malus_nature_description_missing -15
-    items.append(LQMScoreItem(
-        "malus_nature_description_missing", "Description",
-        -15 if nat is None or not nat.strip() else 0, "malus",
-        "Natuur beschrijving ontbreekt." if (nat is None or not nat.strip()) else "Natuur beschrijving aanwezig."
-    ))
-
-    # malus_general_description_short
-    if gen is not None:
-        if len_gen < 75:
-            items.append(LQMScoreItem("malus_general_description_short", "Description", -10, "malus", "Algemene beschrijving te kort (<75)."))
-        elif len_gen < 275:
-            items.append(LQMScoreItem("malus_general_description_short", "Description", -6, "malus", "Algemene beschrijving kort (75–275)."))
-        else:
-            items.append(LQMScoreItem("malus_general_description_short", "Description", 0, "malus", "Lengte OK."))
-    else:
-        items.append(LQMScoreItem("malus_general_description_short", "Description", 0, "malus", "Niet beoordeelbaar.", not_applicable=True))
-
-    # malus_nature_description_short
-    if nat is not None:
-        if len_nat < 20:
-            items.append(LQMScoreItem("malus_nature_description_short", "Description", -10, "malus", "Natuur beschrijving te kort (<20)."))
-        elif len_nat < 200:
-            items.append(LQMScoreItem("malus_nature_description_short", "Description", -6, "malus", "Natuur beschrijving kort (20–200)."))
-        else:
-            items.append(LQMScoreItem("malus_nature_description_short", "Description", 0, "malus", "Lengte OK."))
-    else:
-        items.append(LQMScoreItem("malus_nature_description_short", "Description", 0, "malus", "Niet beoordeelbaar.", not_applicable=True))
-
-    # malus_description_text_not_recented_updated (>2 jaar)
-    days = data.days_since_last_update
-    if days is not None:
-        items.append(LQMScoreItem(
-            "malus_description_text_not_recented_updated", "Description",
-            -2 if days > 730 else 0, "malus",
-            f"Laatste update {days} dagen geleden (malus bij >2 jaar)."
-        ))
-    else:
-        items.append(LQMScoreItem("malus_description_text_not_recented_updated", "Description", 0, "malus", "Laatste update onbekend.", not_applicable=True))
-
-    # malus_general_and_nature_description_same
-    if gen is not None and nat is not None and len_gen > 75 and gen.strip() == nat.strip():
-        items.append(LQMScoreItem("malus_general_and_nature_description_same", "Description", -8, "malus", "Algemene en natuur beschrijving identiek."))
-    else:
-        items.append(LQMScoreItem("malus_general_and_nature_description_same", "Description", 0, "malus", "Niet identiek of te kort."))
-
-    # malus_content_aggressive_caps (≥2 woorden met ≥8 tekens in CAPS)
     combined = (gen or "") + " " + (nat or "")
+
+    # 1. Algemene beschrijving lang genoeg (min 275, bij voorkeur 550+)
+    if gen is None or not gen.strip():
+        items.append(LQMScoreItem(
+            "algemene_beschrijving", "Description", 0, "advisory",
+            "Algemene beschrijving ontbreekt.",
+            passed=False,
+            recommendation="Voeg een algemene beschrijving toe van minimaal 275 tekens (bij voorkeur meer dan 550). Beschrijf het huisje, de omgeving en wat gasten kunnen verwachten."
+        ))
+    elif len_gen < MIN_GEN_LEN:
+        items.append(LQMScoreItem(
+            "algemene_beschrijving", "Description", 0, "advisory",
+            f"Algemene beschrijving is {len_gen} tekens (minimaal {MIN_GEN_LEN}).",
+            passed=False,
+            recommendation=f"Maak de algemene beschrijving langer: minimaal {MIN_GEN_LEN} tekens (bij voorkeur meer dan 550). Nu: {len_gen} tekens."
+        ))
+    else:
+        items.append(LQMScoreItem(
+            "algemene_beschrijving", "Description", 0, "advisory",
+            f"Algemene beschrijving is lang genoeg ({len_gen} tekens).",
+            passed=True
+        ))
+
+    # 2. Natuur beschrijving lang genoeg (min 200, bij voorkeur 550+)
+    if nat is None or not nat.strip():
+        items.append(LQMScoreItem(
+            "natuur_beschrijving", "Description", 0, "advisory",
+            "Natuur beschrijving ontbreekt.",
+            passed=False,
+            recommendation="Voeg een aparte natuur beschrijving toe van minimaal 200 tekens (bij voorkeur meer dan 550). Beschrijf de natuur, het landschap en de omgeving rond het huisje."
+        ))
+    elif len_nat < MIN_NAT_LEN:
+        items.append(LQMScoreItem(
+            "natuur_beschrijving", "Description", 0, "advisory",
+            f"Natuur beschrijving is {len_nat} tekens (minimaal {MIN_NAT_LEN}).",
+            passed=False,
+            recommendation=f"Maak de natuur beschrijving langer: minimaal {MIN_NAT_LEN} tekens (bij voorkeur meer dan 550). Nu: {len_nat} tekens."
+        ))
+    else:
+        items.append(LQMScoreItem(
+            "natuur_beschrijving", "Description", 0, "advisory",
+            f"Natuur beschrijving is lang genoeg ({len_nat} tekens).",
+            passed=True
+        ))
+
+    # 3. Algemene en natuur beschrijving verschillend van elkaar
+    if gen is not None and nat is not None and len_gen > 75 and gen.strip() == nat.strip():
+        items.append(LQMScoreItem(
+            "beschrijvingen_verschillend", "Description", 0, "advisory",
+            "Algemene en natuur beschrijving zijn identiek.",
+            passed=False,
+            recommendation="Schrijf een aparte tekst voor de natuur beschrijving in plaats van dezelfde tekst te kopiëren. De natuur beschrijving moet gaan over het landschap, de omgeving en de natuur; de algemene beschrijving over het huisje en de voorzieningen."
+        ))
+    else:
+        items.append(LQMScoreItem(
+            "beschrijvingen_verschillend", "Description", 0, "advisory",
+            "Algemene en natuur beschrijving zijn verschillend.",
+            passed=True
+        ))
+
+    # 4. Geen teksten in capslock (geen lange woorden in HOOFDLETTERS)
     if combined:
         words = re.findall(r"[A-Za-z]{8,}", combined)
         caps_count = sum(1 for w in words if w == w.upper() and len(w) >= 8)
-        items.append(LQMScoreItem(
-            "malus_content_aggressive_caps", "Description",
-            -5 if caps_count >= 2 else 0, "malus",
-            f"Aantal lange woorden in CAPS: {caps_count} (malus bij ≥2)."
-        ))
+        if caps_count >= 2:
+            items.append(LQMScoreItem(
+                "geen_capslock", "Description", 0, "advisory",
+                f"Er staan {caps_count} lange woorden in HOOFDLETTERS.",
+                passed=False,
+                recommendation="Vermijd lange woorden in HOOFDLETTERS (capslock); dat oogt onrustig en onprofessioneel. Gebruik normale hoofdletters (alleen eerste letter van een zin of eigennaam)."
+            ))
+        else:
+            items.append(LQMScoreItem(
+                "geen_capslock", "Description", 0, "advisory",
+                "Geen overmatig gebruik van hoofdletters.",
+                passed=True
+            ))
     else:
-        items.append(LQMScoreItem("malus_content_aggressive_caps", "Description", 0, "malus", "Geen tekst.", not_applicable=True))
-
-    # malus_content_outdated_covid_related
-    if combined:
-        lower = combined.lower()
-        has_covid = any(kw in lower for kw in COVID_KEYWORDS)
         items.append(LQMScoreItem(
-            "malus_content_outdated_covid_related", "Description",
-            -3 if has_covid else 0, "malus",
-            "COVID-gerelateerde tekst gevonden." if has_covid else "Geen COVID-verwijzingen."
+            "geen_capslock", "Description", 0, "advisory",
+            "Geen tekst om te controleren.",
+            not_applicable=True
         ))
-    else:
-        items.append(LQMScoreItem("malus_content_outdated_covid_related", "Description", 0, "malus", "Geen tekst.", not_applicable=True))
 
     return items
 
@@ -688,16 +682,24 @@ def score_all(data: ExtractedData) -> list[LQMScoreItem]:
 
 
 def total_lqm_score(items: list[LQMScoreItem]) -> int:
-    return sum(i.score for i in items)
+    """Totaal LQM-score; Description telt niet mee (advisory)."""
+    return sum(i.score for i in items if i.category != "Description")
 
 
 def summary_by_category(items: list[LQMScoreItem]) -> dict:
     by_cat = {}
     for i in items:
-        by_cat.setdefault(i.category, {"bonus": 0, "malus": 0, "items": []})
+        by_cat.setdefault(i.category, {"bonus": 0, "malus": 0, "items": [], "advisory": False, "all_passed": None})
         by_cat[i.category]["items"].append(i)
-        if i.type_ == "bonus":
+        if i.category == "Description":
+            by_cat[i.category]["advisory"] = True
+        elif i.type_ == "bonus":
             by_cat[i.category]["bonus"] += i.score
         else:
             by_cat[i.category]["malus"] += i.score
+    # Description: overall groene check als alle checks voldaan
+    if "Description" in by_cat:
+        desc_items = by_cat["Description"]["items"]
+        applicable = [i for i in desc_items if not i.not_applicable and i.passed is not None]
+        by_cat["Description"]["all_passed"] = all(i.passed for i in applicable) if applicable else None
     return by_cat

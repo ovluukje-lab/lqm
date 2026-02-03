@@ -155,6 +155,21 @@
       padding: 0.15rem 0.5rem;
       border-radius: 4px;
     }
+    .advisory-header { display: flex; align-items: center; gap: 0.5rem; }
+    .advisory-check {
+      color: var(--bonus);
+      font-weight: 700;
+      font-size: 1.1rem;
+    }
+    .advisory-recommendation {
+      background: rgba(248, 81, 73, 0.08);
+      border-left: 3px solid var(--malus);
+      padding: 0.6rem 0.75rem;
+      margin-top: 0.25rem;
+      font-size: 0.9rem;
+      color: var(--text);
+    }
+    .attr-list li .advisory-passed { color: var(--bonus); font-weight: 600; }
     .result-url {
       font-size: 0.9rem;
       color: var(--muted);
@@ -251,31 +266,75 @@
         for (const cat of order) {
           if (!byCat[cat]) continue;
           const info = byCat[cat];
+          const isAdvisory = info.advisory === true;
           const catTotal = (info.bonus || 0) + (info.malus || 0);
           const header = document.createElement('div');
           header.className = 'category-header';
-          header.innerHTML = `
-            <span>${cat}</span>
-            <span class="cat-score">
-              <span class="b">+${info.bonus || 0}</span>
-              <span class="m">${info.malus || 0}</span>
-              (totaal ${catTotal})
-            </span>
-          `;
+          if (isAdvisory) {
+            const allPassed = info.all_passed === true;
+            header.innerHTML = `
+              <span class="advisory-header">
+                <span>${cat} – Aanbeveling</span>
+                ${allPassed ? '<span class="advisory-check">✓ Voldoet aan alle voorwaarden</span>' : ''}
+              </span>
+              <span class="cat-score"></span>
+            `;
+          } else {
+            header.innerHTML = `
+              <span>${cat}</span>
+              <span class="cat-score">
+                <span class="b">+${info.bonus || 0}</span>
+                <span class="m">${info.malus || 0}</span>
+                (totaal ${catTotal})
+              </span>
+            `;
+          }
           const ul = document.createElement('ul');
           ul.className = 'attr-list';
           for (const i of info.items || []) {
             const li = document.createElement('li');
-            const scoreCl = i.type === 'bonus' ? 'bonus' : (i.type === 'malus' ? 'malus' : 'na');
-            const scoreText = i.not_applicable ? 'n.v.t.' : (i.score >= 0 ? '+' + i.score : i.score);
-            li.innerHTML = `
-              <div>
-                <span class="attr-name">${i.attribute}</span>
-                ${i.not_applicable ? '<span class="n-a-badge">niet beoordeelbaar vanaf URL</span>' : ''}
-                <div class="attr-reason">${escapeHtml(i.reason)}</div>
-              </div>
-              <span class="attr-score ${scoreCl}">${scoreText}</span>
-            `;
+            if (isAdvisory && i.passed !== undefined) {
+            const label = (i.attribute || '').replace(/_/g, ' ');
+            const friendlyLabel = label.replace(/\b\w/g, c => c.toUpperCase());
+            if (i.passed) {
+                li.innerHTML = `
+                  <div>
+                    <span class="attr-name">${escapeHtml(friendlyLabel)}</span>
+                    <div class="attr-reason advisory-passed">✓ ${escapeHtml(i.reason)}</div>
+                  </div>
+                  <span class="attr-score bonus">✓</span>
+                `;
+              } else {
+                li.innerHTML = `
+                  <div style="flex:1;">
+                    <span class="attr-name">${escapeHtml(friendlyLabel)}</span>
+                    <div class="attr-reason">${escapeHtml(i.reason)}</div>
+                    ${i.recommendation ? `<div class="advisory-recommendation">${escapeHtml(i.recommendation)}</div>` : ''}
+                  </div>
+                  <span class="attr-score malus">–</span>
+                `;
+              }
+            } else if (i.not_applicable && isAdvisory) {
+              const advLabel = (i.attribute || '').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+              li.innerHTML = `
+                <div>
+                  <span class="attr-name">${escapeHtml(advLabel)}</span>
+                  <div class="attr-reason">${escapeHtml(i.reason)}</div>
+                </div>
+                <span class="attr-score na">n.v.t.</span>
+              `;
+            } else {
+              const scoreCl = i.type === 'bonus' ? 'bonus' : (i.type === 'malus' ? 'malus' : 'na');
+              const scoreText = i.not_applicable ? 'n.v.t.' : (i.score >= 0 ? '+' + i.score : i.score);
+              li.innerHTML = `
+                <div>
+                  <span class="attr-name">${i.attribute}</span>
+                  ${i.not_applicable ? '<span class="n-a-badge">niet beoordeelbaar vanaf URL</span>' : ''}
+                  <div class="attr-reason">${escapeHtml(i.reason)}</div>
+                </div>
+                <span class="attr-score ${scoreCl}">${scoreText}</span>
+              `;
+            }
             ul.appendChild(li);
           }
           const section = document.createElement('div');
