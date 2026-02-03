@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LQM Advertentie Beoordelaar</title>
+  <style>
+    :root {
+      --bg: #0f1419;
+      --surface: #1a2332;
+      --border: #2d3a4d;
+      --text: #e6edf3;
+      --muted: #8b949e;
+      --bonus: #3fb950;
+      --malus: #f85149;
+      --accent: #58a6ff;
+      --font: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: var(--font);
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      line-height: 1.5;
+    }
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 2rem 1.5rem;
+    }
+    h1 {
+      font-size: 1.75rem;
+      font-weight: 600;
+      margin-bottom: 0.5rem;
+    }
+    .subtitle {
+      color: var(--muted);
+      margin-bottom: 2rem;
+    }
+    .input-row {
+      display: flex;
+      gap: 0.75rem;
+      margin-bottom: 1.5rem;
+    }
+    .input-row input {
+      flex: 1;
+      padding: 0.75rem 1rem;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--surface);
+      color: var(--text);
+      font-size: 1rem;
+    }
+    .input-row input::placeholder {
+      color: var(--muted);
+    }
+    .input-row input:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+    .btn {
+      padding: 0.75rem 1.5rem;
+      border: none;
+      border-radius: 8px;
+      font-size: 1rem;
+      font-weight: 500;
+      cursor: pointer;
+      background: var(--accent);
+      color: #fff;
+    }
+    .btn:hover { opacity: 0.9; }
+    .btn:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+    .loading {
+      color: var(--muted);
+      margin-top: 1rem;
+    }
+    .error {
+      background: rgba(248, 81, 73, 0.15);
+      border: 1px solid var(--malus);
+      color: #f85149;
+      padding: 1rem;
+      border-radius: 8px;
+      margin-bottom: 1rem;
+    }
+    .score-total {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.5rem;
+      margin-bottom: 1.5rem;
+      text-align: center;
+    }
+    .score-total .number {
+      font-size: 2.5rem;
+      font-weight: 700;
+    }
+    .score-total .number.positive { color: var(--bonus); }
+    .score-total .number.negative { color: var(--malus); }
+    .score-total .label { color: var(--muted); font-size: 0.9rem; }
+    .category {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      margin-bottom: 1rem;
+      overflow: hidden;
+    }
+    .category-header {
+      padding: 1rem 1.25rem;
+      font-weight: 600;
+      font-size: 1.05rem;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .category-header .cat-score {
+      font-size: 0.95rem;
+      color: var(--muted);
+    }
+    .category-header .cat-score .b { color: var(--bonus); }
+    .category-header .cat-score .m { color: var(--malus); }
+    .attr-list {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+    }
+    .attr-list li {
+      padding: 0.6rem 1.25rem;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 1rem;
+    }
+    .attr-list li:last-child { border-bottom: none; }
+    .attr-name { font-size: 0.9rem; color: var(--text); }
+    .attr-reason { font-size: 0.85rem; color: var(--muted); flex: 1; }
+    .attr-score {
+      font-weight: 600;
+      min-width: 2.5rem;
+      text-align: right;
+    }
+    .attr-score.bonus { color: var(--bonus); }
+    .attr-score.malus { color: var(--malus); }
+    .attr-score.na { color: var(--muted); font-weight: 400; }
+    .n-a-badge {
+      font-size: 0.75rem;
+      color: var(--muted);
+      background: rgba(139, 148, 158, 0.2);
+      padding: 0.15rem 0.5rem;
+      border-radius: 4px;
+    }
+    .result-url {
+      font-size: 0.9rem;
+      color: var(--muted);
+      margin-bottom: 1rem;
+      word-break: break-all;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>LQM Advertentie Beoordelaar</h1>
+    <p class="subtitle">Voer een URL in van een advertentie. De agent analyseert de listing op 50 LQM-attributen in 8 categorieën (Description, Impact, Location, Availability, Photos, Guest Opinion, Filters, Time Settings).</p>
+
+    <form id="form">
+      <div class="input-row">
+        <input type="url" id="url" name="url" placeholder="https://voorbeeld.nl/advertentie/123" required>
+        <button type="submit" class="btn" id="submitBtn">Analyseren</button>
+      </div>
+    </form>
+
+    <div id="loading" class="loading" style="display: none;">Pagina ophalen en beoordelen…</div>
+    <div id="error" class="error" style="display: none;"></div>
+    <div id="result" style="display: none;">
+      <p class="result-url" id="resultUrl"></p>
+      <div class="score-total">
+        <div class="number" id="totalScore">0</div>
+        <div class="label">Totaal LQM-score</div>
+      </div>
+      <div id="categories"></div>
+    </div>
+  </div>
+
+  <script>
+    // API-basis-URL: leeg =zelfde domein. Bij eigen hosting (alleen HTML hier): zet hier de URL van je Flask-API (bijv. https://lqm-agent.onrender.com).
+    window.LQM_API_BASE = window.LQM_API_BASE || '';
+    const form = document.getElementById('form');
+    const urlInput = document.getElementById('url');
+    const submitBtn = document.getElementById('submitBtn');
+    const loading = document.getElementById('loading');
+    const errorEl = document.getElementById('error');
+    const resultEl = document.getElementById('result');
+    const resultUrlEl = document.getElementById('resultUrl');
+    const totalScoreEl = document.getElementById('totalScore');
+    const categoriesEl = document.getElementById('categories');
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const url = urlInput.value.trim();
+      if (!url) return;
+
+      loading.style.display = 'block';
+      errorEl.style.display = 'none';
+      resultEl.style.display = 'none';
+      submitBtn.disabled = true;
+
+      try {
+        const apiBase = (window.LQM_API_BASE || '').replace(/\/$/, '');
+        const res = await fetch(apiBase + '/api/analyze', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: url.startsWith('http') ? url : 'https://' + url })
+        });
+        const text = await res.text();
+        let data;
+        try {
+          data = JSON.parse(text);
+        } catch (parseErr) {
+          if (text.trim().startsWith('<')) {
+            throw new Error(
+              'De server gaf HTML in plaats van JSON. Start de Flask-app in de map lqm-advertentie-agent met: python app.py — en open de site op http://localhost:5000'
+            );
+          }
+          throw new Error('Ongeldig antwoord van de server: ' + (parseErr.message || 'geen JSON'));
+        }
+
+        if (!res.ok) {
+          throw new Error(data.error || 'Analyse mislukt');
+        }
+
+        if (!data.ok) {
+          throw new Error(data.error || 'Onbekende fout');
+        }
+
+        resultUrlEl.textContent = 'URL: ' + data.url;
+        const total = data.total_lqm_score;
+        totalScoreEl.textContent = total;
+        totalScoreEl.classList.remove('positive', 'negative');
+        if (total > 0) totalScoreEl.classList.add('positive');
+        else if (total < 0) totalScoreEl.classList.add('negative');
+
+        categoriesEl.innerHTML = '';
+        const order = ['Description', 'Impact', 'Location', 'Availability', 'Photos', 'Guest Opinion', 'Filters', 'Time Settings'];
+        const byCat = data.by_category || {};
+        for (const cat of order) {
+          if (!byCat[cat]) continue;
+          const info = byCat[cat];
+          const catTotal = (info.bonus || 0) + (info.malus || 0);
+          const header = document.createElement('div');
+          header.className = 'category-header';
+          header.innerHTML = `
+            <span>${cat}</span>
+            <span class="cat-score">
+              <span class="b">+${info.bonus || 0}</span>
+              <span class="m">${info.malus || 0}</span>
+              (totaal ${catTotal})
+            </span>
+          `;
+          const ul = document.createElement('ul');
+          ul.className = 'attr-list';
+          for (const i of info.items || []) {
+            const li = document.createElement('li');
+            const scoreCl = i.type === 'bonus' ? 'bonus' : (i.type === 'malus' ? 'malus' : 'na');
+            const scoreText = i.not_applicable ? 'n.v.t.' : (i.score >= 0 ? '+' + i.score : i.score);
+            li.innerHTML = `
+              <div>
+                <span class="attr-name">${i.attribute}</span>
+                ${i.not_applicable ? '<span class="n-a-badge">niet beoordeelbaar vanaf URL</span>' : ''}
+                <div class="attr-reason">${escapeHtml(i.reason)}</div>
+              </div>
+              <span class="attr-score ${scoreCl}">${scoreText}</span>
+            `;
+            ul.appendChild(li);
+          }
+          const section = document.createElement('div');
+          section.className = 'category';
+          section.appendChild(header);
+          section.appendChild(ul);
+          categoriesEl.appendChild(section);
+        }
+
+        resultEl.style.display = 'block';
+      } catch (err) {
+        errorEl.textContent = err.message || 'Er is iets misgegaan.';
+        errorEl.style.display = 'block';
+      } finally {
+        loading.style.display = 'none';
+        submitBtn.disabled = false;
+      }
+    });
+
+    function escapeHtml(s) {
+      const div = document.createElement('div');
+      div.textContent = s;
+      return div.innerHTML;
+    }
+  </script>
+</body>
+</html>

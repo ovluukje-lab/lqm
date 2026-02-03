@@ -1,0 +1,11 @@
+# Render Blueprint: deploy LQM Advertentie Agent als Web Service
+# Zet deze repo op GitHub en kies in Render: New > Blueprint, koppel de repo.
+services:
+  - type: web
+    name: lqm-advertentie-agent
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn --bind 0.0.0.0:$PORT app:app
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0
