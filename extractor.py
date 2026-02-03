@@ -100,6 +100,41 @@ def _cover_photo_suggests_nature(soup: BeautifulSoup, url: str) -> Optional[bool
     return None
 
 
+def _first_photo_house_not_interior(soup: BeautifulSoup) -> Optional[bool]:
+    """Eerste foto: huisje (exterior) en geen interieur? Uit alt/src. True=huisje, False=interieur, None=onbekend."""
+    imgs = _listing_images(soup)
+    if not imgs:
+        return None
+    first = imgs[0]
+    alt = (first.get("alt") or "").lower()
+    src = (first.get("src") or "").lower()
+    text = alt + " " + src
+    if not text.strip():
+        return None
+    interior = ("interieur", "interior", "woonkamer", "living", "slaapkamer", "bedroom", "keuken", "kitchen", "badkamer", "bathroom", "binnen", "indoor")
+    exterior_house = ("huis", "house", "buiten", "exterior", "facade", "vakantiehuis", "chalet", "bungalow", "villa", "accommodatie", "natuur", "nature")
+    if any(k in text for k in interior):
+        return False
+    if any(k in text for k in exterior_house):
+        return True
+    return None
+
+
+def _first_photo_dimensions(soup: BeautifulSoup) -> tuple[Optional[int], Optional[int]]:
+    """Breedte en hoogte van eerste listing-foto uit HTML-attributen. (width, height) of (None, None)."""
+    imgs = _listing_images(soup)
+    if not imgs:
+        return None, None
+    first = imgs[0]
+    w = first.get("width") or first.get("data-width")
+    h = first.get("height") or first.get("data-height")
+    if w is not None:
+        w = int(re.sub(r"[^0-9]", "", str(w)) or 0) or None
+    if h is not None:
+        h = int(re.sub(r"[^0-9]", "", str(h)) or 0) or None
+    return w, h
+
+
 def _find_json_ld(soup: BeautifulSoup) -> list[dict]:
     """Haalt JSON-LD scripts op (o.a. voor Accommodation)."""
     result = []
@@ -261,6 +296,12 @@ def extract_from_html(html: str, url: str) -> ExtractedData:
     # Coverfoto (eerste foto): moet huisje in de natuur zijn – afleiden uit alt-tekst eerste gallery-foto
     cover_nature = _cover_photo_suggests_nature(soup, url)
     data.cover_photo_suggests_nature = cover_nature
+
+    # Photos advisory: eerste foto huisje (geen interieur), resolutie eerste foto
+    data.first_photo_house_not_interior = _first_photo_house_not_interior(soup)
+    w, h = _first_photo_dimensions(soup)
+    data.first_photo_width = w
+    data.first_photo_height = h
 
     return data
 

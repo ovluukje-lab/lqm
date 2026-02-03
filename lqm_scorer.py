@@ -60,6 +60,9 @@ class ExtractedData:
     photo_count: Optional[int] = None
     ctr: Optional[float] = None
     cover_photo_suggests_nature: Optional[bool] = None  # True/False uit eerste foto alt-tekst
+    first_photo_house_not_interior: Optional[bool] = None  # True=huisje/exterior, False=interieur, None=niet te bepalen
+    first_photo_width: Optional[int] = None  # breedte eerste foto (uit HTML) voor resolutie-check
+    first_photo_height: Optional[int] = None
     # Guest opinion
     click_to_add_to_cart: Optional[float] = None
     nr_reviews: Optional[int] = None
@@ -413,76 +416,110 @@ def score_availability(data: ExtractedData) -> list[LQMScoreItem]:
     return items
 
 
-# ---------- Category: Photos ----------
-# Ideaal: meer dan 10 en minder dan 50 foto's. Onder 10 = malus, boven 50 = malus.
+# ---------- Category: Photos (advisory: aanbeveling + groene check) ----------
+# Geen punten; check aantal (11–50), eerste foto huisje/geen interieur, geen namen/collage, resolutie.
+MIN_PHOTOS = 11
+MAX_PHOTOS = 50
+MIN_PHOTO_WIDTH = 600
+MIN_PHOTO_HEIGHT = 400
+
+
 def score_photos(data: ExtractedData) -> list[LQMScoreItem]:
+    """Photos als aanbeveling: aantal 11–50, eerste foto huisje (geen interieur), geen namen/collage, resolutie. Groene check als alles voldoet."""
     items = []
     n = data.photo_count
-    ctr = data.ctr
 
-    # bonus_ctr
-    if ctr is not None:
+    # 1. Aantal foto's: minimaal 11, maximaal 50
+    if n is None:
         items.append(LQMScoreItem(
-            "bonus_ctr", "Photos",
-            10 if ctr > 0.02 else 0, "bonus",
-            f"CTR: {ctr:.4f} (bonus bij >0.02)."
+            "aantal_fotos", "Photos", 0, "advisory",
+            "Aantal foto's niet bepaald.",
+            not_applicable=True,
+            recommendation="Zorg voor minimaal 11 en maximaal 50 foto's van de accommodatie."
+        ))
+    elif MIN_PHOTOS <= n <= MAX_PHOTOS:
+        items.append(LQMScoreItem(
+            "aantal_fotos", "Photos", 0, "advisory",
+            f"Aantal foto's is goed: {n} (tussen {MIN_PHOTOS} en {MAX_PHOTOS}).",
+            passed=True
+        ))
+    elif n < MIN_PHOTOS:
+        items.append(LQMScoreItem(
+            "aantal_fotos", "Photos", 0, "advisory",
+            f"Te weinig foto's: {n} (minimaal {MIN_PHOTOS}).",
+            passed=False,
+            recommendation=f"Voeg meer foto's toe. Een goede advertentie heeft minimaal {MIN_PHOTOS} en maximaal {MAX_PHOTOS} foto's. Nu: {n}."
         ))
     else:
-        items.append(LQMScoreItem("bonus_ctr", "Photos", 0, "bonus", "CTR niet beschikbaar (tracking).", not_applicable=True))
-
-    # bonus_photo_count_ideal: 11–49 foto's is ideale positie
-    if n is not None:
-        if 11 <= n <= 49:
-            items.append(LQMScoreItem("bonus_photo_count_ideal", "Photos", 5, "bonus", f"Ideaal aantal foto's: {n} (11–49)."))
-        else:
-            items.append(LQMScoreItem("bonus_photo_count_ideal", "Photos", 0, "bonus", f"Aantal foto's: {n} (ideaal 11–49)."))
-    else:
-        items.append(LQMScoreItem("bonus_photo_count_ideal", "Photos", 0, "bonus", "Aantal foto's niet bepaald.", not_applicable=True))
-
-    # malus_photo_count_low: onder 10 = aftrek
-    if n is not None:
-        if n == 0:
-            items.append(LQMScoreItem("malus_photo_count_low", "Photos", -50, "malus", "Geen foto's."))
-        elif n < 2:
-            items.append(LQMScoreItem("malus_photo_count_low", "Photos", -20, "malus", "Minder dan 2 foto's."))
-        elif n < 5:
-            items.append(LQMScoreItem("malus_photo_count_low", "Photos", -10, "malus", "Minder dan 5 foto's."))
-        elif n < 10:
-            items.append(LQMScoreItem("malus_photo_count_low", "Photos", -5, "malus", "Minder dan 10 foto's."))
-        else:
-            items.append(LQMScoreItem("malus_photo_count_low", "Photos", 0, "malus", f"Foto's: {n}."))
-    else:
-        items.append(LQMScoreItem("malus_photo_count_low", "Photos", 0, "malus", "Aantal foto's niet bepaald.", not_applicable=True))
-
-    # malus_photo_count_high: boven 50 = aftrek
-    if n is not None:
-        if n > 60:
-            items.append(LQMScoreItem("malus_photo_count_high", "Photos", -5, "malus", "Meer dan 60 foto's."))
-        elif n >= 50:
-            items.append(LQMScoreItem("malus_photo_count_high", "Photos", -3, "malus", "50 of meer foto's (ideaal <50)."))
-        else:
-            items.append(LQMScoreItem("malus_photo_count_high", "Photos", 0, "malus", "Aantal OK."))
-    else:
-        items.append(LQMScoreItem("malus_photo_count_high", "Photos", 0, "malus", "Niet bepaald.", not_applicable=True))
-
-    # Coverfoto: eerste foto moet huisje in de natuur zijn (uit alt-tekst)
-    cov = data.cover_photo_suggests_nature
-    if cov is True:
-        items.append(LQMScoreItem("bonus_cover_photo_nature", "Photos", 5, "bonus", "Coverfoto suggereert huisje in de natuur (uit alt-tekst)."))
-    elif cov is False:
-        items.append(LQMScoreItem("malus_cover_photo_not_nature", "Photos", -3, "malus", "Coverfoto lijkt geen huisje in de natuur (uit alt-tekst)."))
-    else:
-        items.append(LQMScoreItem("bonus_cover_photo_nature", "Photos", 0, "bonus", "Coverfoto niet beoordeelbaar (geen/weinig alt-tekst).", not_applicable=True))
-
-    # malus_ctr_poor
-    if ctr is not None:
         items.append(LQMScoreItem(
-            "malus_ctr_poor", "Photos",
-            -5 if 0.0001 < ctr <= 0.003 else 0, "malus",
-            f"CTR laag: {ctr:.4f}."
+            "aantal_fotos", "Photos", 0, "advisory",
+            f"Te veel foto's: {n} (maximaal {MAX_PHOTOS}).",
+            passed=False,
+            recommendation=f"Gebruik maximaal {MAX_PHOTOS} foto's. Te veel foto's kan overweldigend zijn. Nu: {n}. Kies de beste en meest representatieve foto's."
+        ))
+
+    # 2. Eerste foto: huisje (exterior), geen interieur
+    first_house = data.first_photo_house_not_interior
+    if first_house is True:
+        items.append(LQMScoreItem(
+            "eerste_foto_huisje", "Photos", 0, "advisory",
+            "De eerste (cover)foto toont een huisje/exterior, geen interieur.",
+            passed=True
+        ))
+    elif first_house is False:
+        items.append(LQMScoreItem(
+            "eerste_foto_huisje", "Photos", 0, "advisory",
+            "De eerste foto lijkt een interieurfoto te zijn (uit alt-tekst/bestandsnaam).",
+            passed=False,
+            recommendation="Zet een foto van het huisje zelf (exterior, bijvoorbeeld de voorgevel of het huisje in de omgeving) als eerste/coverfoto. Geen interieur (woonkamer, keuken, slaapkamer) als eerste foto; dat kan later in de galerij."
         ))
     else:
-        items.append(LQMScoreItem("malus_ctr_poor", "Photos", 0, "malus", "Niet beschikbaar.", not_applicable=True))
+        items.append(LQMScoreItem(
+            "eerste_foto_huisje", "Photos", 0, "advisory",
+            "Niet te bepalen of de eerste foto een huisje of interieur is (geen/weinig alt-tekst).",
+            not_applicable=True,
+            recommendation="Zorg dat de eerste foto het huisje van buiten toont (geen interieur als coverfoto). Voeg bij voorkeur een duidelijke alt-tekst toe aan de foto's."
+        ))
+
+    # 3. Geen namen op foto's (niet automatisch te controleren)
+    items.append(LQMScoreItem(
+        "geen_namen_op_fotos", "Photos", 0, "advisory",
+        "Niet automatisch te controleren.",
+        not_applicable=True,
+        recommendation="Controleer handmatig dat er geen namen, watermerken of logo's op de foto's staan. Foto's moeten professioneel en neutraal ogen."
+    ))
+
+    # 4. Geen collage (niet automatisch te controleren)
+    items.append(LQMScoreItem(
+        "geen_collage", "Photos", 0, "advisory",
+        "Niet automatisch te controleren.",
+        not_applicable=True,
+        recommendation="Gebruik losse foto's, geen collages. Elke foto moet één duidelijke afbeelding tonen."
+    ))
+
+    # 5. Voldoende resolutie
+    w, h = data.first_photo_width, data.first_photo_height
+    if w is not None and h is not None:
+        if w >= MIN_PHOTO_WIDTH and h >= MIN_PHOTO_HEIGHT:
+            items.append(LQMScoreItem(
+                "voldoende_resolutie", "Photos", 0, "advisory",
+                f"Resolutie eerste foto is voldoende ({w}×{h} px).",
+                passed=True
+            ))
+        else:
+            items.append(LQMScoreItem(
+                "voldoende_resolutie", "Photos", 0, "advisory",
+                f"Resolutie eerste foto is laag: {w}×{h} px (aanbevolen min. {MIN_PHOTO_WIDTH}×{MIN_PHOTO_HEIGHT}).",
+                passed=False,
+                recommendation=f"Upload foto's met voldoende resolutie (minimaal {MIN_PHOTO_WIDTH}×{MIN_PHOTO_HEIGHT} pixels aanbevolen). Kleine of wazige foto's ogen onprofessioneel."
+            ))
+    else:
+        items.append(LQMScoreItem(
+            "voldoende_resolutie", "Photos", 0, "advisory",
+            "Resolutie niet uit HTML te bepalen.",
+            not_applicable=True,
+            recommendation=f"Zorg dat alle foto's voldoende resolutie hebben (minimaal {MIN_PHOTO_WIDTH}×{MIN_PHOTO_HEIGHT} pixels aanbevolen). Geen kleine of wazige afbeeldingen."
+        ))
 
     return items
 
@@ -682,8 +719,16 @@ def score_all(data: ExtractedData) -> list[LQMScoreItem]:
 
 
 def total_lqm_score(items: list[LQMScoreItem]) -> int:
-    """Totaal LQM-score; Description telt niet mee (advisory)."""
-    return sum(i.score for i in items if i.category != "Description")
+    """Totaal LQM-score; Description en Photos (advisory) tellen niet mee."""
+    return sum(i.score for i in items if i.category not in ("Description", "Photos"))
+
+
+def _advisory_all_passed(items: list[LQMScoreItem]) -> bool | None:
+    """True als alle advisory-checks voldaan, False als minstens één niet voldoet, None als alleen n.v.t."""
+    applicable = [i for i in items if not i.not_applicable and i.passed is not None]
+    if not applicable:
+        return None
+    return all(i.passed for i in applicable)
 
 
 def summary_by_category(items: list[LQMScoreItem]) -> dict:
@@ -691,15 +736,13 @@ def summary_by_category(items: list[LQMScoreItem]) -> dict:
     for i in items:
         by_cat.setdefault(i.category, {"bonus": 0, "malus": 0, "items": [], "advisory": False, "all_passed": None})
         by_cat[i.category]["items"].append(i)
-        if i.category == "Description":
+        if i.category in ("Description", "Photos"):
             by_cat[i.category]["advisory"] = True
         elif i.type_ == "bonus":
             by_cat[i.category]["bonus"] += i.score
         else:
             by_cat[i.category]["malus"] += i.score
-    # Description: overall groene check als alle checks voldaan
-    if "Description" in by_cat:
-        desc_items = by_cat["Description"]["items"]
-        applicable = [i for i in desc_items if not i.not_applicable and i.passed is not None]
-        by_cat["Description"]["all_passed"] = all(i.passed for i in applicable) if applicable else None
+    for cat in ("Description", "Photos"):
+        if cat in by_cat:
+            by_cat[cat]["all_passed"] = _advisory_all_passed(by_cat[cat]["items"])
     return by_cat

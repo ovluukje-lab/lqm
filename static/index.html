@@ -317,9 +317,10 @@
             } else if (i.not_applicable && isAdvisory) {
               const advLabel = (i.attribute || '').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
               li.innerHTML = `
-                <div>
+                <div style="flex:1;">
                   <span class="attr-name">${escapeHtml(advLabel)}</span>
                   <div class="attr-reason">${escapeHtml(i.reason)}</div>
+                  ${i.recommendation ? `<div class="advisory-recommendation">${escapeHtml(i.recommendation)}</div>` : ''}
                 </div>
                 <span class="attr-score na">n.v.t.</span>
               `;
