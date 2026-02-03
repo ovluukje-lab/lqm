@@ -83,4 +83,4 @@ git push -u origin main
   Bij `git push` kan Git om je GitHub-gebruikersnaam en wachtwoord vragen. Gebruik als wachtwoord een **Personal Access Token**: GitHub → Settings → Developer settings → Personal access tokens → Generate new token. Kopieer de token en plak die waar om een wachtwoord wordt gevraagd.
 
 - **"remote origin already exists"**  
-  Dan is de repo al gekoppeld. Je kunt gewoon `git push -u origin main` doen (of eerst `git remote remove origin` en dan opnieuw `git remote add origin ...`).
+  De koppeling met GitHub bestaat al. Sla `git remote add origin ...` over en voer alleen uit: `git push -u origin main`. Als de URL toch verkeerd is (andere gebruikersnaam), voer dan eerst uit: `git remote remove origin` en daarna opnieuw `git remote add origin https://github.com/JOUW-GEBRUIKERSNAAM/lqm-advertentie-agent.git`, en dan `git push -u origin main`.

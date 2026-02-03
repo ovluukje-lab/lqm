@@ -57,6 +57,7 @@ class ExtractedData:
     # Photos
     photo_count: Optional[int] = None
     ctr: Optional[float] = None
+    cover_photo_suggests_nature: Optional[bool] = None  # True/False uit eerste foto alt-tekst
     # Guest opinion
     click_to_add_to_cart: Optional[float] = None
     nr_reviews: Optional[int] = None
@@ -419,6 +420,7 @@ def score_availability(data: ExtractedData) -> list[LQMScoreItem]:
 
 
 # ---------- Category: Photos ----------
+# Ideaal: meer dan 10 en minder dan 50 foto's. Onder 10 = malus, boven 50 = malus.
 def score_photos(data: ExtractedData) -> list[LQMScoreItem]:
     items = []
     n = data.photo_count
@@ -434,7 +436,16 @@ def score_photos(data: ExtractedData) -> list[LQMScoreItem]:
     else:
         items.append(LQMScoreItem("bonus_ctr", "Photos", 0, "bonus", "CTR niet beschikbaar (tracking).", not_applicable=True))
 
-    # malus_photo_count_low
+    # bonus_photo_count_ideal: 11–49 foto's is ideale positie
+    if n is not None:
+        if 11 <= n <= 49:
+            items.append(LQMScoreItem("bonus_photo_count_ideal", "Photos", 5, "bonus", f"Ideaal aantal foto's: {n} (11–49)."))
+        else:
+            items.append(LQMScoreItem("bonus_photo_count_ideal", "Photos", 0, "bonus", f"Aantal foto's: {n} (ideaal 11–49)."))
+    else:
+        items.append(LQMScoreItem("bonus_photo_count_ideal", "Photos", 0, "bonus", "Aantal foto's niet bepaald.", not_applicable=True))
+
+    # malus_photo_count_low: onder 10 = aftrek
     if n is not None:
         if n == 0:
             items.append(LQMScoreItem("malus_photo_count_low", "Photos", -50, "malus", "Geen foto's."))
@@ -449,16 +460,25 @@ def score_photos(data: ExtractedData) -> list[LQMScoreItem]:
     else:
         items.append(LQMScoreItem("malus_photo_count_low", "Photos", 0, "malus", "Aantal foto's niet bepaald.", not_applicable=True))
 
-    # malus_photo_count_high
+    # malus_photo_count_high: boven 50 = aftrek
     if n is not None:
         if n > 60:
             items.append(LQMScoreItem("malus_photo_count_high", "Photos", -5, "malus", "Meer dan 60 foto's."))
         elif n >= 50:
-            items.append(LQMScoreItem("malus_photo_count_high", "Photos", -3, "malus", "50–60 foto's."))
+            items.append(LQMScoreItem("malus_photo_count_high", "Photos", -3, "malus", "50 of meer foto's (ideaal <50)."))
         else:
             items.append(LQMScoreItem("malus_photo_count_high", "Photos", 0, "malus", "Aantal OK."))
     else:
         items.append(LQMScoreItem("malus_photo_count_high", "Photos", 0, "malus", "Niet bepaald.", not_applicable=True))
+
+    # Coverfoto: eerste foto moet huisje in de natuur zijn (uit alt-tekst)
+    cov = data.cover_photo_suggests_nature
+    if cov is True:
+        items.append(LQMScoreItem("bonus_cover_photo_nature", "Photos", 5, "bonus", "Coverfoto suggereert huisje in de natuur (uit alt-tekst)."))
+    elif cov is False:
+        items.append(LQMScoreItem("malus_cover_photo_not_nature", "Photos", -3, "malus", "Coverfoto lijkt geen huisje in de natuur (uit alt-tekst)."))
+    else:
+        items.append(LQMScoreItem("bonus_cover_photo_nature", "Photos", 0, "bonus", "Coverfoto niet beoordeelbaar (geen/weinig alt-tekst).", not_applicable=True))
 
     # malus_ctr_poor
     if ctr is not None:

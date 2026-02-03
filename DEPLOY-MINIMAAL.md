@@ -22,6 +22,8 @@ git push -u origin main
 
 5. Log in als Git daarom vraagt (of gebruik een Personal Access Token).
 
+**Als je "remote origin already exists" ziet:** sla het commando `git remote add origin ...` over en voer alleen uit: `git push -u origin main`.
+
 ---
 
 ## Deel 2: Render (eenmalig)
@@ -39,4 +41,4 @@ git push -u origin main
 
 ---
 
-Daarna: wijzigingen lokaal doen → in de map `git add .` → `git commit -m "..."` → `git push` → Render bouwt automatisch opnieuw.
+**Nieuwe versie deployen:** wijzigingen lokaal doen → in de map `git add .` → `git commit -m "..."` → `git push` → daarna in Render: automatisch nieuwe deploy **of** **Manual Deploy** (Render bouwt dan de laatste code uit de repo).

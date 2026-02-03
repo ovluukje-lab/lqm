@@ -3,6 +3,7 @@
 from __future__ import annotations
 import json
 import re
+from typing import Optional
 from urllib.parse import urlparse
 import requests
 from bs4 import BeautifulSoup
@@ -53,25 +54,50 @@ def _get_all_text(soup: BeautifulSoup, selectors: list[str], join: str = " ") ->
     return join.join(parts) if parts else ""
 
 
-def _count_images(soup: BeautifulSoup, url: str) -> int:
-    """Telt afbeeldingen die waarschijnlijk bij de listing horen (niet logo's/icons)."""
+_IMG_SKIP = {"logo", "icon", "avatar", "sprite", "pixel", "tracking", "1x1", "placeholder"}
+
+
+def _listing_images(soup: BeautifulSoup) -> list:
+    """Lijst van img-elementen die bij de listing horen (niet logo's/icons)."""
     imgs = soup.find_all("img", src=True)
-    base_domain = urlparse(url).netloc
-    count = 0
-    skip = {"logo", "icon", "avatar", "sprite", "pixel", "tracking", "1x1", "placeholder"}
+    out = []
     for img in imgs:
         src = (img.get("src") or "").lower()
         alt = (img.get("alt") or "").lower()
-        if any(s in src or s in alt for s in skip):
+        if any(s in src or s in alt for s in _IMG_SKIP):
             continue
-        if "data:image" in src:
-            count += 1
-            continue
-        if src.startswith("http") or src.startswith("//"):
-            count += 1
-        elif src.startswith("/"):
-            count += 1
-    return count
+        if "data:image" in src or src.startswith("http") or src.startswith("//") or src.startswith("/"):
+            out.append(img)
+    return out
+
+
+def _count_images(soup: BeautifulSoup, url: str) -> int:
+    """Telt afbeeldingen die waarschijnlijk bij de listing horen (niet logo's/icons)."""
+    return len(_listing_images(soup))
+
+
+def _cover_photo_suggests_nature(soup: BeautifulSoup, url: str) -> Optional[bool]:
+    """Eerste (cover)foto: huisje in de natuur? Afgeleid uit alt-tekst. True/False/None."""
+    imgs = _listing_images(soup)
+    if not imgs:
+        return None
+    first = imgs[0]
+    alt = (first.get("alt") or "").lower()
+    src = (first.get("src") or "").lower()
+    if not alt and not src:
+        return None
+    text = alt + " " + src
+    nature = ("natuur", "nature", "bos", "forest", "weide", "veld", "landschap", "landscape", "buiten", "outdoor")
+    house = ("huis", "house", "vakantiehuis", "cottage", "chalet", "bungalow", "villa", "accommodatie")
+    has_nature = any(k in text for k in nature)
+    has_house = any(k in text for k in house)
+    if has_nature and has_house:
+        return True
+    if has_nature or has_house:
+        return True
+    if len(alt) > 10:
+        return False
+    return None
 
 
 def _find_json_ld(soup: BeautifulSoup) -> list[dict]:
@@ -198,15 +224,43 @@ def extract_from_html(html: str, url: str) -> ExtractedData:
                 except (IndexError, ValueError):
                     pass
 
-    # Sustainability / leaves: zoek naar "blad" of "leaf" of "duurzaam"
-    text_lower = (soup.get_text() or "").lower()
-    if "duurzaam" in text_lower or "sustainability" in text_lower or "eco" in text_lower:
-        # Heuristiek: als er iets over duurzaamheid staat, neem 1 leaf
-        data.sustainability_impact_level_leaves = 1
-    # Exact aantal leaves is zonder API meestal niet te bepalen
+    # Impact: nh-impact-house-tag percentage='' in paginabron; max 112 punten → 90+ = 3 blaadjes, 67+ = 2, 45+ = 1
+    impact_tag = soup.find("nh-impact-house-tag")
+    if impact_tag:
+        raw = impact_tag.get("percentage") or impact_tag.get("points")
+        if raw is not None:
+            try:
+                val = float(str(raw).strip())
+                if 0 <= val <= 100:
+                    points = val * 112 / 100
+                elif 0 <= val <= 112:
+                    points = val
+                else:
+                    points = 0
+                if points >= 90:
+                    data.sustainability_impact_level_leaves = 3
+                elif points >= 67:
+                    data.sustainability_impact_level_leaves = 2
+                elif points >= 45:
+                    data.sustainability_impact_level_leaves = 1
+                else:
+                    data.sustainability_impact_level_leaves = 0
+            except (ValueError, TypeError):
+                pass
+    if data.sustainability_impact_level_leaves is None:
+        text_lower = (soup.get_text() or "").lower()
+        if "duurzaam" in text_lower or "sustainability" in text_lower or "eco" in text_lower:
+            data.sustainability_impact_level_leaves = 1
 
-    # Overige velden (allow_instant_booking, channel_manager, iCals, etc.) zijn
-    # typisch niet zichtbaar op de publieke pagina → blijven None; scorer geeft N/A.
+    # Availability: instant booking in paginabron: <span class="nh-icon__instant-booking"></span>
+    if soup.find("span", class_=lambda c: c and "instant-booking" in (c if isinstance(c, str) else " ".join(c))):
+        data.allow_instant_booking = 1
+    elif soup.find(class_=re.compile(r"nh-icon__instant-booking", re.I)):
+        data.allow_instant_booking = 1
+
+    # Coverfoto (eerste foto): moet huisje in de natuur zijn – afleiden uit alt-tekst eerste gallery-foto
+    cover_nature = _cover_photo_suggests_nature(soup, url)
+    data.cover_photo_suggests_nature = cover_nature
 
     return data
 
